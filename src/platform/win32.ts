@@ -27,12 +27,14 @@ export class WindowsPlatform implements IPlatform {
         if (wmpfPid === undefined) {
             throw new Error("[frida] WeChatAppEx.exe process not found");
         }
+        console.log(wmpfPid)
         const wmpfProcess = processes.find(
             (process) => process.pid === wmpfPid,
         );
         if (wmpfProcess === undefined) {
             throw new Error("[frida] wmpf browser process not found");
         }
+        console.log(wmpfProcess.parameters)
         const wmpfProcessArgv = wmpfProcess.parameters.argv as Array<string>;
         const flueRuntimeDir = wmpfProcessArgv.find(e => e.startsWith("--flue-runtime-dir"));
         // legacy wmpf path fall back
