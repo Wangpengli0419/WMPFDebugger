@@ -1,4 +1,5 @@
 (function () {
+    console.log("[user script] start");
     // __hookEmit is provided by the injector: it pushes the message back to
     // the debugger process through a CDP binding (and console.log as fallback)
     var emit =
@@ -83,5 +84,6 @@
             " frozen: " +
             Object.isFrozen(target),
     );
+    console.log("[user script] end");
 })();
 "hooked";

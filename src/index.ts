@@ -82,10 +82,10 @@ const logCdpConsoleEvent = (
                 }
                 return String(arg.description ?? arg.type ?? "");
             });
-            logger.info(`[miniapp console]${ctx} ${args.join(" ")}`);
+            // logger.info(`[miniapp console]${ctx} ${args.join(" ")}`);
         } else if (parsed.method === "Log.entryAdded") {
             const entry = parsed.params?.entry ?? {};
-            logger.info(`[miniapp log]${ctx} ${entry.text ?? ""}`);
+            // logger.info(`[miniapp log]${ctx} ${entry.text ?? ""}`);
         }
     } catch (_) {
         // not a JSON payload, ignore
@@ -126,7 +126,7 @@ const logCdpEventOnce = (
                     `params=${JSON.stringify(parsed.params).slice(0, 400)}`,
             );
         } else {
-            logger.info(`[hook] cdp event ${parsed.method} ctx=${ctx}`);
+            // logger.info(`[hook] cdp event ${parsed.method} ctx=${ctx}`);
         }
     } catch (_) {
         // not a JSON payload, ignore
@@ -474,7 +474,7 @@ const debugServer = (
                 }
                 return String(arg.description ?? arg.type ?? "");
             });
-            logger.info(`[hook console] ${args.join(" ")}`);
+            // logger.info(`[hook console] ${args.join(" ")}`);
             return;
         }
         if (parsed.method === "Runtime.bindingCalled") {
@@ -601,7 +601,7 @@ const debugServer = (
             logger.main_debug(`[miniapp] [DEBUG] decoded data:`);
             logger.main_debug(unwrappedData);
         } catch (e) {
-            logger.error(`[miniapp] miniapp client err: ${e}`);
+            // logger.error(`[miniapp] miniapp client err: ${e}`);
         }
 
         if (unwrappedData === null) {
@@ -677,10 +677,10 @@ const debugServer = (
 
     wss.on("connection", (ws: WebSocket, request: any) => {
         const clientId = ++miniappConnectionCounter;
-        logger.info(
-            `[miniapp] miniapp client #${clientId} connected url=${JSON.stringify(request?.url ?? "")} ` +
-                `headers=${JSON.stringify(request?.headers ?? {})}`,
-        );
+        // logger.info(
+        //     `[miniapp] miniapp client #${clientId} connected url=${JSON.stringify(request?.url ?? "")} ` +
+        //         `headers=${JSON.stringify(request?.headers ?? {})}`,
+        // );
         const state: DebugClientState = {
             appid: null,
             messageCount: 0,
