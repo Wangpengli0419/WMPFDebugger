@@ -1,0 +1,1 @@
+npx ts-node src/index.ts  --hook-appid wx345ee4b4e565aa02 --hook-script ./hooks/test.js

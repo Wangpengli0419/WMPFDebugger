@@ -6,6 +6,8 @@ type CliOptions = {
     debugMain: boolean;
     debugFrida: boolean;
     autoDetect: boolean;
+    hookAppId?: string;
+    hookScript?: string;
 };
 
 // default debugging port, do not change
@@ -23,6 +25,8 @@ Options:
   --debug-main         Output main process debug messages
   --debug-frida        Output Frida client messages
   --auto-detect        Automatically detect hook offsets (Windows x64)
+  --hook-appid <appid> Target miniapp appid to inject into (requires --hook-script)
+  --hook-script <path> JavaScript file evaluated in the AppService context
   -h, --help           Show this help message`);
 };
 
@@ -51,6 +55,8 @@ const parse_cli_options = (): CliOptions => {
             "debug-main": { type: "boolean" },
             "debug-frida": { type: "boolean" },
             "auto-detect": { type: "boolean" },
+            "hook-appid": { type: "string" },
+            "hook-script": { type: "string" },
             help: { type: "boolean", short: "h" },
         },
         allowPositionals: false,
@@ -61,12 +67,28 @@ const parse_cli_options = (): CliOptions => {
         process.exit(0);
     }
 
+    if ((values["hook-appid"] === undefined) !== (values["hook-script"] === undefined)) {
+        throw new Error(
+            "[main] --hook-appid and --hook-script must be used together",
+        );
+    }
+
+    const hookAppId = values["hook-appid"]?.trim().toLowerCase();
+    if (hookAppId !== undefined && !/^wx[0-9a-f]{16}$/.test(hookAppId)) {
+        throw new Error(
+            `[main] invalid --hook-appid: ${values["hook-appid"]} ` +
+                "(expected \"wx\" followed by 16 lowercase hex chars)",
+        );
+    }
+
     return {
         debugPort: parse_port("--debug-port", values["debug-port"], DEBUG_PORT),
         cdpPort: parse_port("--cdp-port", values["cdp-port"], CDP_PORT),
         debugMain: values["debug-main"] ?? false,
         debugFrida: values["debug-frida"] ?? false,
         autoDetect: values["auto-detect"] ?? false,
+        hookAppId,
+        hookScript: values["hook-script"],
     };
 };
 

@@ -74,6 +74,140 @@ const patchCDPFilter = (base, config) => {
     });
 };
 
+const APP_ID_LENGTH = 18;
+const APP_ID_SCAN_CHUNK = 0x1000;
+
+const isHexDigit = (code) =>
+    (code >= 0x30 && code <= 0x39) || (code >= 0x61 && code <= 0x66);
+
+// appid is "wx" followed by 16 lowercase hex chars
+const matchAppIdAt = (bytes, offset) => {
+    if (offset + APP_ID_LENGTH > bytes.length) {
+        return null;
+    }
+    if (bytes[offset] !== 0x77 || bytes[offset + 1] !== 0x78) {
+        return null;
+    }
+    for (let i = 2; i < APP_ID_LENGTH; i++) {
+        if (!isHexDigit(bytes[offset + i])) {
+            return null;
+        }
+    }
+    let appId = "";
+    for (let i = 0; i < APP_ID_LENGTH; i++) {
+        appId += String.fromCharCode(bytes[offset + i]);
+    }
+    return appId;
+};
+
+const readCxxString = (address) => {
+    try {
+        // libc++ std::string: high bit of byte 23 marks the long representation
+        const sizeMarker = address.add(23).readS8();
+        if (sizeMarker < 0) {
+            const length = address.add(8).readU64().toNumber();
+            if (length <= 0 || length > 64) {
+                return null;
+            }
+            return address.readPointer().readUtf8String(length);
+        }
+        if (sizeMarker === 0) {
+            return null;
+        }
+        return address.readUtf8String(sizeMarker);
+    } catch (e) {
+        return null;
+    }
+};
+
+const scanAppIdBytes = (base, size) => {
+    for (let offset = 0; offset < size; offset += APP_ID_SCAN_CHUNK) {
+        const length = Math.min(APP_ID_SCAN_CHUNK + APP_ID_LENGTH, size - offset);
+        if (length < APP_ID_LENGTH) {
+            break;
+        }
+        let data;
+        try {
+            data = base.add(offset).readByteArray(length);
+        } catch (e) {
+            continue;
+        }
+        if (!data) {
+            continue;
+        }
+        const bytes = new Uint8Array(data);
+        for (let i = 0; i + APP_ID_LENGTH <= bytes.length; i++) {
+            const appId = matchAppIdAt(bytes, i);
+            if (appId) {
+                return appId;
+            }
+        }
+    }
+    return null;
+};
+
+const scanAppIdPointers = (base, size) => {
+    for (let offset = 0; offset + Process.pointerSize <= size; offset += Process.pointerSize) {
+        let target;
+        try {
+            target = base.add(offset).readPointer();
+        } catch (e) {
+            continue;
+        }
+        const range = Process.findRangeByAddress(target);
+        if (!range || range.protection.indexOf("r") < 0) {
+            continue;
+        }
+        let data;
+        try {
+            data = target.readByteArray(APP_ID_LENGTH);
+        } catch (e) {
+            continue;
+        }
+        if (!data) {
+            continue;
+        }
+        const appId = matchAppIdAt(new Uint8Array(data), 0);
+        if (appId) {
+            return appId;
+        }
+    }
+    return null;
+};
+
+const findAppId = (a1, config, launchConfigPtr) => {
+    try {
+        if (config.AppIdStringOffset !== undefined) {
+            const appId = readCxxString(
+                launchConfigPtr.add(config.AppIdStringOffset),
+            );
+            if (appId && /^wx[0-9a-f]{16}$/.test(appId)) {
+                return appId;
+            }
+        }
+
+        // best effort: appid usually lives in the launch config, sometimes inline
+        // as a std::string, sometimes behind a pointer
+        const candidates = [
+            [launchConfigPtr, 0x2000],
+            [a1, 0x800],
+        ];
+        for (const [base, size] of candidates) {
+            if (!base || base.isNull()) {
+                continue;
+            }
+            const appId =
+                scanAppIdBytes(base, size) || scanAppIdPointers(base, size);
+            if (appId) {
+                return appId;
+            }
+        }
+    } catch (e) {
+        send(`[hook] findAppId error: ${e}`);
+    }
+    return null;
+};
+
 const handleOnLoadStart = (a1, config) => {
     let miniappLaunchConfigPtr;
     let remoteDebugConfigPtr;
@@ -139,11 +273,18 @@ const handleOnLoadStart = (a1, config) => {
         1005, 1007, 1008, 1011, 1012, 1027, 1035, 1037, 1053, 1074, 1145, 1178,
         1256, 1260, 1302, 1308,
     ];
-    if (!sceneNumberArray.includes(miniappScenePtr.readInt())) {
+    const scene = miniappScenePtr.readInt();
+    const appid = findAppId(a1, config, miniappLaunchConfigPtr);
+    send({
+        type: "miniappLoadStart",
+        appid,
+        scene,
+    });
+    if (!sceneNumberArray.includes(scene)) {
         return;
     }
 
-    send(`[hook] scene: ${miniappScenePtr.readInt()}`);
+    send(`[hook] scene: ${scene}`);
     send("[hook] hook scene condition -> 1101");
     miniappScenePtr.writeInt(1101);
 
@@ -198,7 +339,7 @@ const patchOnLoadStart = (base, config) => {
 
 const parseConfig = () => {
     const rawConfig = `@@CONFIG@@`;
-    if (rawConfig.includes("@@")) {
+    if (rawConfig.indexOf("@@CONFIG@@") !== -1) {
         // test addresses
         return {
             Version: 18955,
